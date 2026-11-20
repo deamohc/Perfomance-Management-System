@@ -1359,10 +1359,11 @@
         // Ganti URL di bawah ini dengan URL Firebase Realtime Database milik Anda
         // Contoh: 'https://penilaian-kinerja-mkk-default-rtdb.asia-southeast1.firebasedatabase.app'
         // =========================================================================
-        firebaseUrl: 'https://NAMA-PROJECT-ANDA-default-rtdb.asia-southeast1.firebasedatabase.app',
-        syncStatus: 'offline', // 'syncing' | 'synced' | 'offline'
+        firebaseUrl: 'https://peformance-management-system-default-rtdb.asia-southeast1.firebasedatabase.app',
+        firebaseSecretPath: 'mkk_mgm_rahasia_9823x71a',
+        syncStatus: 'offline',
         lastSyncedAt: '',
-
+        
         currentUser: null,
         loginForm: { username: '', password: '' },
         loginError: '',
@@ -1408,7 +1409,11 @@
         employees: [],
 
         get isFirebaseConfigured() {
-          return this.firebaseUrl && !this.firebaseUrl.includes('NAMA-PROJECT-ANDA') && this.firebaseUrl.startsWith('http');
+          get firebaseEndpoint() {
+            const cleanSecret = (this.firebaseSecretPath || '').replace(/^\/|\/$/g, '');
+            return cleanSecret ? `${cleanUrl}/${cleanSecret}/appraisalData.json` : `${cleanUrl}/appraisalData.json`;
+        },
+          return this.firebaseUrl && !this.firebaseUrl.includes('peformance-management-system') && this.firebaseUrl.startsWith('http');
         },
 
         get syncStatusText() {
@@ -1499,7 +1504,6 @@
 
           this.syncStatus = 'syncing';
           try {
-            const cleanUrl = this.firebaseUrl.replace(/\/$/, '');
             const res = await fetch(`${cleanUrl}/appraisalData.json`);
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const cloudData = await res.json();
@@ -1570,7 +1574,6 @@
 
           this.syncStatus = 'syncing';
           try {
-            const cleanUrl = this.firebaseUrl.replace(/\/$/, '');
             const res = await fetch(`${cleanUrl}/appraisalData.json`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
