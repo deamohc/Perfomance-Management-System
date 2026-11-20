@@ -1355,13 +1355,11 @@
     function appraisalApp() {
       return {
         // =========================================================================
-        // KONFIGURASI FIREBASE REALTIME DATABASE
-        // Ganti URL di bawah ini dengan URL Firebase Realtime Database milik Anda
-        // Contoh: 'https://penilaian-kinerja-mkk-default-rtdb.asia-southeast1.firebasedatabase.app'
+        // KONFIGURASI FIREBASE REALTIME DATABASE (JALUR RAHASIA)
         // =========================================================================
         firebaseUrl: 'https://peformance-management-system-default-rtdb.asia-southeast1.firebasedatabase.app',
         firebaseSecretPath: 'mkk_mgm_rahasia_9823x71a',
-        syncStatus: 'offline',
+        syncStatus: 'offline', // 'syncing' | 'synced' | 'offline'
         lastSyncedAt: '',
         
         currentUser: null,
@@ -1409,11 +1407,13 @@
         employees: [],
 
         get isFirebaseConfigured() {
-          get firebaseEndpoint() {
-            const cleanSecret = (this.firebaseSecretPath || '').replace(/^\/|\/$/g, '');
-            return cleanSecret ? `${cleanUrl}/${cleanSecret}/appraisalData.json` : `${cleanUrl}/appraisalData.json`;
+          return this.firebaseUrl && !this.firebaseUrl.includes('NAMA-PROJECT-ANDA') && this.firebaseUrl.startsWith('http');
         },
-          return this.firebaseUrl && !this.firebaseUrl.includes('peformance-management-system') && this.firebaseUrl.startsWith('http');
+
+        get firebaseEndpoint() {
+          const cleanUrl = this.firebaseUrl.replace(/\/$/, '');
+          const cleanSecret = (this.firebaseSecretPath || '').replace(/^\/|\/$/g, '');
+          return cleanSecret ? `${cleanUrl}/${cleanSecret}/appraisalData.json` : `${cleanUrl}/appraisalData.json`;
         },
 
         get syncStatusText() {
@@ -1504,7 +1504,7 @@
 
           this.syncStatus = 'syncing';
           try {
-            const res = await fetch(`${cleanUrl}/appraisalData.json`);
+            const res = await fetch(this.firebaseEndpoint);
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const cloudData = await res.json();
 
@@ -1574,7 +1574,7 @@
 
           this.syncStatus = 'syncing';
           try {
-            const res = await fetch(`${cleanUrl}/appraisalData.json`, {
+            const res = await fetch(this.firebaseEndpoint, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1725,7 +1725,7 @@
         exportDataJSON() {
           const backupData = {
             app: "Appraisal_PT_MKK_CV_MGM",
-            version: "v10",
+            version: "v10.1",
             exportDate: new Date().toISOString(),
             settings: this.settings,
             employees: this.employees,
