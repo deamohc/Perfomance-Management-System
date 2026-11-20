@@ -1461,9 +1461,16 @@
 
         defaultSupervisors() {
           return [
-            { id: 101, name: 'Kepala Bagian Pelayanan & Keperawatan', department: 'Keperawatan & Medis', username: 'kabag_medis', password: '123', assignedEmpIds: [1, 2] },
-            { id: 102, name: 'Kepala Bagian Keuangan & Admin', department: 'Keuangan & Admin', username: 'kabag_keu', password: '123', assignedEmpIds: [3] }
+            { id: 101, name: 'Kepala Bagian Pelayanan & Keperawatan', department: 'Keperawatan & Medis', username: 'kabag_medis', password: '123', assignedEmpIds: ['1', '2'] },
+            { id: 102, name: 'Kepala Bagian Keuangan & Admin', department: 'Keuangan & Admin', username: 'kabag_keu', password: '123', assignedEmpIds: ['3'] }
           ];
+        },
+
+        normalizeSupervisors(list) {
+          return (Array.isArray(list) ? list : this.defaultSupervisors()).map(s => ({
+            ...s,
+            assignedEmpIds: Array.isArray(s.assignedEmpIds) ? s.assignedEmpIds.map(String) : []
+          }));
         },
 
         loadFromLocalFallback() {
@@ -1489,7 +1496,7 @@
           }
 
           if (sup) {
-            try { this.supervisors = JSON.parse(sup); } catch(err){ this.supervisors = this.defaultSupervisors(); }
+            try { this.supervisors = this.normalizeSupervisors(JSON.parse(sup)); } catch(err){ this.supervisors = this.defaultSupervisors(); }
           } else {
             this.supervisors = this.defaultSupervisors();
           }
@@ -1516,7 +1523,7 @@
                 this.settings.absenPenaltyAlpha = 1;
               }
               this.employees = cloudData.employees || [];
-              this.supervisors = Array.isArray(cloudData.supervisors) ? cloudData.supervisors : this.defaultSupervisors();
+              this.supervisors = this.normalizeSupervisors(cloudData.supervisors);
 
               // Perbarui cache lokal
               localStorage.setItem('appraisal_settings_v9', JSON.stringify(this.settings));
@@ -1650,6 +1657,7 @@
         openEditSupervisorModal(sup) {
           this.supModal.isEdit = true;
           this.supForm = JSON.parse(JSON.stringify(sup));
+          if (!Array.isArray(this.supForm.assignedEmpIds)) this.supForm.assignedEmpIds = [];
           this.supModal.open = true;
           this.$nextTick(() => lucide.createIcons());
         },
@@ -1659,25 +1667,25 @@
             return;
           }
           if (this.supModal.isEdit) {
-            const idx = this.supervisors.findIndex(s => s.id === this.supForm.id);
-            if (idx !== -1) this.supervisors[idx] = { ...this.supForm };
+            const idx = this.supervisors.findIndex(s => String(s.id) === String(this.supForm.id));
+            if (idx !== -1) this.supervisors[idx] = { ...this.supForm, assignedEmpIds: (this.supForm.assignedEmpIds || []).map(String) };
             this.showToast('Akun Kepala Bagian diperbarui!', 'success');
           } else {
-            this.supervisors.push({ ...this.supForm });
+            this.supervisors.push({ ...this.supForm, assignedEmpIds: [] });
             this.showToast('Akun Kepala Bagian berhasil dibuat!', 'success');
           }
           this.supModal.open = false;
           this.saveToStorage();
         },
         deleteSupervisor(id) {
-          this.supervisors = this.supervisors.filter(s => s.id !== id);
+          this.supervisors = this.supervisors.filter(s => String(s.id) !== String(id));
           this.saveToStorage();
           this.showToast('Akun Kepala Bagian dihapus.', 'info');
         },
 
         openAssignModal(sup) {
           this.assignModal = { open: true, sup };
-          this.assignSelectedIds = [...(sup.assignedEmpIds || [])];
+          this.assignSelectedIds = Array.isArray(sup.assignedEmpIds) ? sup.assignedEmpIds.map(String) : [];
           this.assignSearch = '';
           this.assignDeptFilter = 'ALL';
           this.$nextTick(() => lucide.createIcons());
@@ -1691,30 +1699,31 @@
         },
         selectAllFilteredForAssign() {
           this.filteredEmployeesForAssign.forEach(emp => {
-            if (!this.assignSelectedIds.includes(emp.id)) {
-              this.assignSelectedIds.push(emp.id);
+            const idStr = String(emp.id);
+            if (!this.assignSelectedIds.includes(idStr)) {
+              this.assignSelectedIds.push(idStr);
             }
           });
         },
         saveAssignModal() {
           if (this.assignModal.sup) {
-            this.assignModal.sup.assignedEmpIds = [...this.assignSelectedIds];
+            this.assignModal.sup.assignedEmpIds = this.assignSelectedIds.map(String);
             this.saveToStorage();
             this.showToast(`Daftar karyawan untuk ${this.assignModal.sup.name} disimpan!`, 'success');
           }
           this.assignModal.open = false;
         },
         getEmployeeNameById(id) {
-          const emp = this.employees.find(e => e.id == id);
+          const emp = this.employees.find(e => String(e.id) === String(id));
           return emp ? `${emp.name} (${emp.department})` : 'Karyawan Terhapus';
         },
 
         get roleFilteredEmployees() {
           let baseList = this.filteredEmployees;
           if (this.currentUser && this.currentUser.role === 'SUPERVISOR') {
-            const sup = this.supervisors.find(s => s.id === this.currentUser.id);
-            const allowedIds = sup ? (sup.assignedEmpIds || []) : [];
-            baseList = baseList.filter(emp => allowedIds.includes(emp.id));
+            const sup = this.supervisors.find(s => String(s.id) === String(this.currentUser.id));
+            const allowedIds = sup && Array.isArray(sup.assignedEmpIds) ? sup.assignedEmpIds.map(String) : [];
+            baseList = baseList.filter(emp => allowedIds.includes(String(emp.id)));
           }
           return baseList;
         },
@@ -1725,7 +1734,7 @@
         exportDataJSON() {
           const backupData = {
             app: "Appraisal_PT_MKK_CV_MGM",
-            version: "v10.1",
+            version: "v10.2",
             exportDate: new Date().toISOString(),
             settings: this.settings,
             employees: this.employees,
@@ -1767,7 +1776,7 @@
                 }
                 this.employees = restoredEmployees;
                 if (Array.isArray(restoredSupervisors)) {
-                  this.supervisors = restoredSupervisors;
+                  this.supervisors = this.normalizeSupervisors(restoredSupervisors);
                 }
                 await this.saveToStorage();
                 this.showToast(`Berhasil memulihkan ${this.employees.length} data karyawan & mengirim ke cloud!`, 'success');
@@ -1837,7 +1846,7 @@
             this.showToast('Pilih karyawan sumber terlebih dahulu.', 'warning');
             return;
           }
-          const sourceEmp = this.employees.find(e => e.id == this.copySourceEmpId);
+          const sourceEmp = this.employees.find(e => String(e.id) === String(this.copySourceEmpId));
           if (sourceEmp && sourceEmp.jobdesItems && sourceEmp.jobdesItems.length > 0) {
             this.jobdescModal.emp.jobdesItems = JSON.parse(JSON.stringify(sourceEmp.jobdesItems));
             this.showToast(`Jobdesc berhasil disalin dari ${sourceEmp.name}!`, 'success');
@@ -1980,7 +1989,7 @@
         },
         saveEmployeeForm() {
           if (this.modal.isEdit) {
-            const idx = this.employees.findIndex(e => e.id === this.form.id);
+            const idx = this.employees.findIndex(e => String(e.id) === String(this.form.id));
             if (idx !== -1) this.employees[idx] = { ...this.form };
             this.showToast('Data karyawan diperbarui!', 'success');
           } else {
@@ -2000,7 +2009,7 @@
         },
         executeConfirmAction() {
           if (this.confirmModal.actionType === 'delete_one') {
-            this.employees = this.employees.filter(e => e.id !== this.confirmModal.targetId);
+            this.employees = this.employees.filter(e => String(e.id) !== String(this.confirmModal.targetId));
             this.showToast('Karyawan dihapus.', 'warning');
           } else if (this.confirmModal.actionType === 'clear_all') {
             this.employees = [];
