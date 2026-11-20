@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sistem Penilaian Kinerja & Kenaikan Gaji - PT MKK & CV MGM (v11 - Tiered Late & Alpha Rules)</title>
+  <title>Sistem Penilaian Kinerja & Kenaikan Gaji - PT MKK & CV MGM (v10 - Cloud Sync)</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Alpine.js -->
@@ -27,7 +27,7 @@
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col" x-data="appraisalApp()" x-init="initApp()">
- 
+
   <!-- Toast Notification -->
   <div x-show="toast.show" x-transition.opacity.duration.300ms
        class="fixed bottom-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium no-print"
@@ -36,7 +36,7 @@
     <i :data-lucide="toast.type === 'success' ? 'check-circle-2' : 'info'" class="w-5 h-5 shrink-0"></i>
     <span x-text="toast.message"></span>
   </div>
- 
+
   <!-- =================================================================== -->
   <!-- HALAMAN LOGIN (MUNCUL SAAT BELUM LOGIN)                             -->
   <!-- =================================================================== -->
@@ -49,8 +49,18 @@
         <h1 class="text-xl font-extrabold tracking-tight">Portal Penilaian Kinerja</h1>
         <p class="text-xs text-emerald-100">PT Medika Kesehatan Kerja & CV Medika Group Mandiri</p>
       </div>
- 
-      <form @submit.prevent="handleLogin()" class="p-8 space-y-5">
+
+      <!-- Status Koneksi Cloud di Halaman Login -->
+      <div class="px-8 pt-5">
+        <div class="flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-semibold border"
+             :class="syncStatus === 'synced' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : (syncStatus === 'syncing' ? 'bg-blue-50 text-blue-800 border-blue-200' : 'bg-amber-50 text-amber-800 border-amber-200')">
+          <span class="w-2 h-2 rounded-full"
+                :class="syncStatus === 'synced' ? 'bg-emerald-500' : (syncStatus === 'syncing' ? 'bg-blue-500 animate-ping' : 'bg-amber-500')"></span>
+          <span x-text="syncStatusText"></span>
+        </div>
+      </div>
+
+      <form @submit.prevent="handleLogin()" class="p-8 pt-5 space-y-5">
         <div>
           <label class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Username / ID Login</label>
           <div class="relative">
@@ -58,7 +68,7 @@
             <i data-lucide="user" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5"></i>
           </div>
         </div>
- 
+
         <div>
           <label class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Password / PIN</label>
           <div class="relative">
@@ -66,28 +76,29 @@
             <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5"></i>
           </div>
         </div>
- 
+
         <div x-show="loginError" class="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 flex items-center gap-2">
           <i data-lucide="alert-circle" class="w-4 h-4 shrink-0"></i>
           <span x-text="loginError"></span>
         </div>
- 
-        <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2">
-          <i data-lucide="log-in" class="w-4 h-4"></i><span>Masuk ke Sistem</span>
+
+        <button type="submit" :disabled="syncStatus === 'syncing'" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2">
+          <i data-lucide="log-in" class="w-4 h-4"></i>
+          <span x-text="syncStatus === 'syncing' ? 'Memuat Data Server...' : 'Masuk ke Sistem'"></span>
         </button>
- 
+
         <div class="pt-3 border-t border-slate-100 text-center">
           <p class="text-[11px] text-slate-400">Silakan masukkan Username dan Password yang telah diberikan oleh HRD / Admin.</p>
         </div>
       </form>
     </div>
   </div>
- 
+
   <!-- =================================================================== -->
   <!-- APLIKASI UTAMA (MUNCUL SETELAH LOGIN)                               -->
   <!-- =================================================================== -->
   <div x-show="currentUser" class="flex-grow flex flex-col" style="display: none;">
- 
+
     <!-- Header Navbar -->
     <header class="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm no-print">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -104,10 +115,20 @@
               <p class="text-xs text-slate-500">PT Medika Kesehatan Kerja (PT MKK) & CV Medika Group Mandiri (CV MGM)</p>
             </div>
           </div>
- 
-          <!-- User Badge, Backup & Logout -->
+
+          <!-- Indikator Status Sinkronisasi Cloud, Backup & Logout -->
           <div class="flex flex-wrap items-center gap-2">
-            <!-- Backup & Restore hanya untuk Admin -->
+            <!-- Badge Status Cloud Sync + Tombol Refresh -->
+            <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition"
+                 :class="syncStatus === 'synced' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : (syncStatus === 'syncing' ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-amber-50 border-amber-200 text-amber-800')">
+              <span class="w-2 h-2 rounded-full shrink-0"
+                    :class="syncStatus === 'synced' ? 'bg-emerald-500' : (syncStatus === 'syncing' ? 'bg-blue-500 animate-ping' : 'bg-amber-500')"></span>
+              <span x-text="syncStatusText"></span>
+              <button @click="fetchFromCloud(true)" title="Tarik data terbaru dari server cloud" class="ml-1 p-0.5 hover:bg-black/5 rounded transition">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5" :class="syncStatus === 'syncing' ? 'animate-spin' : ''"></i>
+              </button>
+            </div>
+
             <template x-if="currentUser && currentUser.role === 'ADMIN'">
               <div class="flex items-center gap-1.5">
                 <button @click="exportDataJSON()" title="Unduh file backup JSON agar data aman" class="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
@@ -119,22 +140,20 @@
                 </label>
               </div>
             </template>
- 
-            <!-- Info User Aktif -->
+
             <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold" :class="currentUser && currentUser.role === 'ADMIN' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-blue-50 border-blue-200 text-blue-900'">
               <i :data-lucide="currentUser && currentUser.role === 'ADMIN' ? 'shield' : 'user-check'" class="w-3.5 h-3.5"></i>
               <span x-text="currentUser ? currentUser.name : ''"></span>
               <span class="px-1.5 py-0.2 text-[10px] rounded bg-white/80 uppercase" x-text="currentUser && currentUser.role === 'ADMIN' ? 'Admin' : 'Kepala Bagian'"></span>
             </div>
- 
+
             <button @click="handleLogout()" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition flex items-center gap-1">
               <i data-lucide="log-out" class="w-3.5 h-3.5"></i><span>Keluar</span>
             </button>
           </div>
- 
-          <!-- Navigation Tabs (Khusus Admin vs Khusus Kepala Bagian) -->
+
+          <!-- Navigation Tabs -->
           <nav class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto max-w-full w-full">
-            <!-- MENU ADMIN -->
             <template x-if="currentUser && currentUser.role === 'ADMIN'">
               <div class="flex items-center gap-1">
                 <button @click="switchTab('dashboard')" :class="activeTab === 'dashboard' ? 'bg-white text-emerald-700 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'" class="flex items-center gap-1 px-3 py-2 rounded-lg text-xs transition whitespace-nowrap">
@@ -168,8 +187,7 @@
                 </button>
               </div>
             </template>
- 
-            <!-- MENU KEPALA BAGIAN (HANYA PENILAIAN KINERJA TIMNYA) -->
+
             <template x-if="currentUser && currentUser.role === 'SUPERVISOR'">
               <div class="flex items-center gap-2 px-2 py-1">
                 <button @click="switchTab('kinerja')" class="bg-white text-blue-700 shadow-sm font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs">
@@ -183,10 +201,10 @@
         </div>
       </div>
     </header>
- 
+
     <!-- Main Container -->
     <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
- 
+
       <!-- =================================================================== -->
       <!-- TAB BARU: AKUN & AKSES KEPALA BAGIAN (KHUSUS ADMIN)                 -->
       <!-- =================================================================== -->
@@ -200,7 +218,7 @@
             <i data-lucide="user-plus" class="w-4 h-4"></i><span>+ Tambah Akun Kepala Bagian</span>
           </button>
         </div>
- 
+
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           <template x-for="sup in supervisors" :key="sup.id">
             <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col justify-between space-y-4">
@@ -215,7 +233,7 @@
                     <button @click="deleteSupervisor(sup.id)" class="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg" title="Hapus Akun"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                   </div>
                 </div>
- 
+
                 <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
                   <div class="flex justify-between">
                     <span class="text-slate-500">Username Login:</span>
@@ -226,17 +244,17 @@
                     <span class="font-mono font-bold text-slate-800" x-text="sup.password"></span>
                   </div>
                 </div>
- 
+
                 <div>
                   <div class="text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
                     <span>Karyawan yang Dinilai:</span>
-                    <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px]" x-text="getValidAssignedEmpIds(sup).length + ' Orang'"></span>
+                    <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px]" x-text="(sup.assignedEmpIds || []).length + ' Orang'"></span>
                   </div>
                   <div class="max-h-28 overflow-y-auto border rounded-xl p-2 bg-slate-50/60 space-y-1">
-                    <template x-if="getValidAssignedEmpIds(sup).length === 0">
+                    <template x-if="!sup.assignedEmpIds || sup.assignedEmpIds.length === 0">
                       <p class="text-[11px] text-slate-400 italic text-center py-2">Belum ada karyawan dipilih.</p>
                     </template>
-                    <template x-for="empId in getValidAssignedEmpIds(sup)" :key="empId">
+                    <template x-for="empId in (sup.assignedEmpIds || [])" :key="empId">
                       <div class="text-xs text-slate-700 flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-100">
                         <span class="truncate font-medium" x-text="getEmployeeNameById(empId)"></span>
                       </div>
@@ -244,7 +262,7 @@
                   </div>
                 </div>
               </div>
- 
+
               <button @click="openAssignModal(sup)" class="w-full py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5">
                 <i data-lucide="check-square" class="w-4 h-4"></i><span>Atur Daftar Karyawan yang Dinilai</span>
               </button>
@@ -252,7 +270,7 @@
           </template>
         </div>
       </section>
- 
+
       <!-- =================================================================== -->
       <!-- TAB 1: DATA KARYAWAN (KHUSUS ADMIN)                                 -->
       <!-- =================================================================== -->
@@ -278,7 +296,7 @@
             </button>
           </div>
         </div>
- 
+
         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div class="sm:col-span-2">
             <label class="block text-xs font-semibold text-slate-500 mb-1">Cari Karyawan (Nama / NIK / Jabatan)</label>
@@ -296,7 +314,7 @@
             </select>
           </div>
         </div>
- 
+
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse text-sm">
@@ -337,22 +355,32 @@
           </div>
         </div>
       </section>
- 
+
       <!-- =================================================================== -->
-      <!-- TAB 2: ABSEN (KHUSUS ADMIN)                                         -->
+      <!-- TAB 2: ABSEN (KHUSUS ADMIN - ATURAN TIER TERLAMBAT & ALPHA/HARI)    -->
       <!-- =================================================================== -->
       <section x-show="activeTab === 'absen' && currentUser && currentUser.role === 'ADMIN'" class="space-y-6" style="display: none;">
         <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div class="space-y-1">
+          <div class="space-y-1.5">
             <h2 class="text-lg font-bold text-slate-900">1. Komponen Absen (Sumber: Rekap Manual HR)</h2>
             <p class="text-xs text-slate-500">
-              Maksimal Poin Absen: <strong class="text-emerald-700" x-text="settings.weights.absenMax + ' Poin'"></strong>.
-              Potongan Terlambat: <strong class="text-amber-700" x-text="getLateRulesSummary()"></strong>.
-              Potongan Alpha: <strong class="text-rose-600" x-text="'-' + (settings.absenPenaltyAlpha || 0) + ' pt / hari'"></strong>.
+              Maksimal Poin Absen: <strong class="text-emerald-700" x-text="settings.weights.absenMax + ' Poin'"></strong> • 
+              Potongan Alpha: <strong class="text-rose-600" x-text="'-' + settings.absenPenaltyAlpha + ' pt / hari'"></strong>
             </p>
+            <div class="flex flex-wrap items-center gap-1.5 pt-1">
+              <span class="text-[11px] font-bold text-slate-500 mr-1">Aturan Potongan Terlambat:</span>
+              <template x-for="(lr, idx) in settings.lateRules" :key="idx">
+                <span class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-amber-50 text-amber-900 border border-amber-200"
+                      x-text="(lr.maxDays === null || lr.maxDays === '' ? '≥ ' + lr.minDays + ' hari' : (lr.minDays === lr.maxDays ? lr.minDays + ' hari' : lr.minDays + ' - ' + lr.maxDays + ' hari')) + ' (-' + lr.penalty + ' pt)'">
+                </span>
+              </template>
+            </div>
           </div>
+          <button @click="switchTab('settings')" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition flex items-center gap-1.5 self-start lg:self-center">
+            <i data-lucide="sliders" class="w-3.5 h-3.5"></i><span>Ubah Aturan Potongan</span>
+          </button>
         </div>
- 
+
         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label class="block text-xs font-semibold text-slate-500 mb-1">Filter PT / CV</label>
@@ -376,7 +404,7 @@
             <input type="text" x-model="globalFilter.search" placeholder="Cari nama / NIK..." class="w-full p-2 text-sm bg-slate-50 border border-slate-300 rounded-xl">
           </div>
         </div>
- 
+
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse text-sm">
@@ -385,26 +413,36 @@
                   <th class="py-3.5 px-4">Karyawan</th>
                   <th class="py-3.5 px-4">Unit & Organization</th>
                   <th class="py-3.5 px-4 text-center">Jumlah Terlambat (Hari)</th>
+                  <th class="py-3.5 px-4 text-center">Potongan Terlambat</th>
                   <th class="py-3.5 px-4 text-center">Jumlah Alpha (Hari)</th>
-                  <th class="py-3.5 px-4 text-center">Total Potongan</th>
-                  <th class="py-3.5 px-4 text-right bg-slate-200/50">Poin Absen</th>
+                  <th class="py-3.5 px-4 text-center">Potongan Alpha</th>
+                  <th class="py-3.5 px-4 text-right bg-slate-200/50">Poin Absen Akhir</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-200">
                 <template x-for="emp in filteredEmployees" :key="emp.id">
                   <tr class="hover:bg-slate-50">
                     <td class="py-3.5 px-4 font-bold text-slate-900" x-text="emp.name + ' (' + emp.nik + ')'"></td>
-                    <td class="py-3.5 px-4 text-xs text-slate-600"><span class="font-bold" :class="emp.unit==='PT'?'text-blue-700':'text-rose-700'" x-text="emp.unit"></span> - <span x-text="emp.department"></span></td>
+                    <td class="py-3.5 px-4 text-xs text-slate-600">
+                      <span class="font-bold" :class="emp.unit==='PT'?'text-blue-700':'text-rose-700'" x-text="emp.unit"></span> - <span x-text="emp.department"></span>
+                    </td>
                     <td class="py-3.5 px-4 text-center">
                       <input type="number" min="0" x-model.number="emp.absenLate" @change="saveToStorage()" class="w-24 p-2 text-center text-sm font-bold border rounded-lg">
-                      <div class="text-[11px] text-amber-700 font-semibold mt-1" x-text="'Potong ' + formatNum(calcLatePenalty(emp.absenLate)) + ' pt'"></div>
+                    </td>
+                    <td class="py-3.5 px-4 text-center">
+                      <span class="px-2.5 py-1 rounded-lg text-xs font-bold"
+                            :class="calcLateDeduction(emp) > 0 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'"
+                            x-text="calcLateDeduction(emp) > 0 ? '-' + formatNum(calcLateDeduction(emp)) + ' pt' : '0 pt'"></span>
                     </td>
                     <td class="py-3.5 px-4 text-center">
                       <input type="number" min="0" x-model.number="emp.absenAlpha" @change="saveToStorage()" class="w-24 p-2 text-center text-sm font-bold border rounded-lg">
-                      <div class="text-[11px] text-rose-600 font-semibold mt-1" x-text="'Potong ' + formatNum(calcAlphaPenalty(emp.absenAlpha)) + ' pt'"></div>
                     </td>
-                    <td class="py-3.5 px-4 text-center font-bold text-rose-600" x-text="'-' + formatNum(calcLatePenalty(emp.absenLate) + calcAlphaPenalty(emp.absenAlpha)) + ' pt'"></td>
-                    <td class="py-3.5 px-4 text-right font-extrabold text-emerald-700 bg-slate-50" x-text="formatNum(calcAbsenPoints(emp)) + ' pt'"></td>
+                    <td class="py-3.5 px-4 text-center">
+                      <span class="px-2.5 py-1 rounded-lg text-xs font-bold"
+                            :class="calcAlphaDeduction(emp) > 0 ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-500'"
+                            x-text="calcAlphaDeduction(emp) > 0 ? '-' + formatNum(calcAlphaDeduction(emp)) + ' pt' : '0 pt'"></span>
+                    </td>
+                    <td class="py-3.5 px-4 text-right font-extrabold text-emerald-700 bg-slate-50" x-text="formatNum(calcAbsenPoints(emp)) + ' / ' + settings.weights.absenMax + ' pt'"></td>
                   </tr>
                 </template>
               </tbody>
@@ -412,7 +450,7 @@
           </div>
         </div>
       </section>
- 
+
       <!-- =================================================================== -->
       <!-- TAB 3: KINERJA (ADMIN & KEPALA BAGIAN - TERFILTER OTOMATIS)         -->
       <!-- =================================================================== -->
@@ -426,8 +464,7 @@
             <p class="text-xs text-slate-500 mt-0.5" x-text="currentUser && currentUser.role === 'ADMIN' ? 'Admin dapat mengatur item jobdesc, bobot (%), serta menginput/memantau nilai kinerja semua karyawan.' : 'Silakan klik tombol Nilai Kinerja pada masing-masing anggota tim Anda di bawah ini untuk memberikan skor penilaian (0 - 100) pada setiap item tugas.'"></p>
           </div>
         </div>
- 
-        <!-- Filter Panel Kinerja -->
+
         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label class="block text-xs font-semibold text-slate-500 mb-1">Filter PT / CV</label>
@@ -451,15 +488,13 @@
             <input type="text" x-model="globalFilter.search" placeholder="Cari nama / NIK..." class="w-full p-2 text-sm bg-slate-50 border border-slate-300 rounded-xl">
           </div>
         </div>
- 
-        <!-- Peringatan jika Kepala Bagian belum di-assign karyawan -->
+
         <div x-show="currentUser && currentUser.role === 'SUPERVISOR' && roleFilteredEmployees.length === 0" class="bg-amber-50 border border-amber-200 p-6 rounded-2xl text-center space-y-2">
           <i data-lucide="users" class="w-8 h-8 text-amber-600 mx-auto"></i>
           <h3 class="text-sm font-bold text-amber-900">Belum Ada Karyawan yang Ditugaskan</h3>
           <p class="text-xs text-amber-800 max-w-md mx-auto">Akun Kepala Bagian Anda belum memiliki daftar karyawan yang harus dinilai. Silakan hubungi Admin / HRD untuk mengatur daftar tim Anda.</p>
         </div>
- 
-        <!-- Tabel Daftar Karyawan untuk Kinerja -->
+
         <div x-show="roleFilteredEmployees.length > 0" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="p-4 border-b border-slate-100 flex items-center justify-between">
             <h3 class="text-sm font-bold text-slate-900">Daftar Karyawan untuk Dinilai Kinerjanya</h3>
@@ -505,7 +540,7 @@
           </div>
         </div>
       </section>
- 
+
       <!-- =================================================================== -->
       <!-- TAB 4: SP (KHUSUS ADMIN)                                            -->
       <!-- =================================================================== -->
@@ -516,7 +551,7 @@
             <p class="text-xs text-slate-500">Pengurangan poin: SP1 (<span x-text="settings.spDeductions.SP1"></span> pt), SP2 (<span x-text="settings.spDeductions.SP2"></span> pt), SP3 (<span x-text="settings.spDeductions.SP3"></span> pt).</p>
           </div>
         </div>
- 
+
         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label class="block text-xs font-semibold text-slate-500 mb-1">Filter PT / CV</label>
@@ -540,7 +575,7 @@
             <input type="text" x-model="globalFilter.search" placeholder="Cari nama / NIK..." class="w-full p-2 text-sm bg-slate-50 border border-slate-300 rounded-xl">
           </div>
         </div>
- 
+
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse text-sm">
@@ -573,7 +608,7 @@
           </div>
         </div>
       </section>
- 
+
       <!-- =================================================================== -->
       <!-- TAB 5: TAHSIN (KHUSUS ADMIN)                                        -->
       <!-- =================================================================== -->
@@ -584,7 +619,7 @@
             <p class="text-xs text-slate-500">Bobot Maksimal Tahsin: <strong class="text-emerald-700" x-text="settings.weights.tahsinMax + ' Poin'"></strong> (Skala Nilai 0 - 100).</p>
           </div>
         </div>
- 
+
         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label class="block text-xs font-semibold text-slate-500 mb-1">Filter PT / CV</label>
@@ -608,7 +643,7 @@
             <input type="text" x-model="globalFilter.search" placeholder="Cari nama / NIK..." class="w-full p-2 text-sm bg-slate-50 border border-slate-300 rounded-xl">
           </div>
         </div>
- 
+
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse text-sm">
@@ -634,7 +669,7 @@
           </div>
         </div>
       </section>
- 
+
       <!-- =================================================================== -->
       <!-- TAB 6: KEBIJAKAN DIREKTUR (KHUSUS ADMIN)                            -->
       <!-- =================================================================== -->
@@ -645,7 +680,7 @@
             <p class="text-xs text-slate-500">Penyesuaian poin tambahan/pengurangan oleh Direktur.</p>
           </div>
         </div>
- 
+
         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label class="block text-xs font-semibold text-slate-500 mb-1">Filter PT / CV</label>
@@ -669,7 +704,7 @@
             <input type="text" x-model="globalFilter.search" placeholder="Cari nama / NIK..." class="w-full p-2 text-sm bg-slate-50 border border-slate-300 rounded-xl">
           </div>
         </div>
- 
+
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse text-sm">
@@ -710,7 +745,7 @@
           </div>
         </div>
       </section>
- 
+
       <!-- =================================================================== -->
       <!-- TAB 7: REKAP & HASIL AKHIR (DASHBOARD - KHUSUS ADMIN)               -->
       <!-- =================================================================== -->
@@ -740,7 +775,7 @@
             </button>
           </div>
         </div>
- 
+
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
             <div>
@@ -750,7 +785,7 @@
             </div>
             <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center"><i data-lucide="users" class="w-6 h-6"></i></div>
           </div>
- 
+
           <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
             <div>
               <p class="text-xs font-semibold text-emerald-600 uppercase">Masuk Kategori Baik / SB</p>
@@ -759,7 +794,7 @@
             </div>
             <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><i data-lucide="check-circle-2" class="w-6 h-6"></i></div>
           </div>
- 
+
           <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
             <div>
               <p class="text-xs font-semibold text-rose-600 uppercase">Kategori Cukup / Kurang</p>
@@ -768,7 +803,7 @@
             </div>
             <div class="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center"><i data-lucide="alert-circle" class="w-6 h-6"></i></div>
           </div>
- 
+
           <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
             <div>
               <p class="text-xs font-semibold text-blue-600 uppercase">Rata-Rata Kenaikan</p>
@@ -778,7 +813,7 @@
             <div class="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center"><i data-lucide="trending-up" class="w-6 h-6"></i></div>
           </div>
         </div>
- 
+
         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm no-print grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div>
             <label class="block text-xs font-semibold text-slate-500 mb-1">Filter Unit</label>
@@ -811,7 +846,7 @@
             <input type="text" x-model="globalFilter.search" placeholder="Nama atau NIK..." class="w-full p-2 text-sm bg-slate-50 border rounded-xl">
           </div>
         </div>
- 
+
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="p-5 border-b border-slate-200 flex items-center justify-between">
             <div>
@@ -820,7 +855,7 @@
             </div>
             <div class="text-xs text-slate-500 font-semibold" x-text="filteredEmployees.length + ' data ditampilkan'"></div>
           </div>
- 
+
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
               <thead>
@@ -878,15 +913,15 @@
           </div>
         </div>
       </section>
- 
+
       <!-- =================================================================== -->
-      <!-- TAB 8: PENGATURAN (KHUSUS ADMIN)                                    -->
+      <!-- TAB 8: PENGATURAN (KHUSUS ADMIN - TERMASUK TIER & KONFIG FIREBASE)  -->
       <!-- =================================================================== -->
       <section x-show="activeTab === 'settings' && currentUser && currentUser.role === 'ADMIN'" class="space-y-6" style="display: none;">
         <div class="bg-amber-50 border border-amber-200 p-5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h3 class="text-sm font-bold text-amber-900 flex items-center gap-2"><i data-lucide="shield-check" class="w-4 h-4"></i><span>Keamanan Data: Backup & Restore File (.json)</span></h3>
-            <p class="text-xs text-amber-800 mt-0.5">Simpan cadangan seluruh data karyawan, skor, akun Kepala Bagian, dan pengaturan ke dalam file JSON.</p>
+            <p class="text-xs text-amber-800 mt-0.5">Simpan cadangan seluruh data karyawan, skor, akun Kepala Bagian, dan pengaturan ke dalam file JSON, atau unggah file backup lama Anda ke server cloud.</p>
           </div>
           <div class="flex items-center gap-2.5">
             <button @click="exportDataJSON()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5">
@@ -898,9 +933,10 @@
             </label>
           </div>
         </div>
- 
+
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div class="lg:col-span-7 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+          <!-- Kolom Kiri: Range Nilai & Kenaikan Gaji -->
+          <div class="lg:col-span-6 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
             <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><i data-lucide="sliders-horizontal" class="w-5 h-5"></i></div>
@@ -913,7 +949,7 @@
                 <i data-lucide="plus" class="w-3.5 h-3.5"></i><span>Tambah Range</span>
               </button>
             </div>
- 
+
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-xs font-bold text-slate-600 mb-1">Tahun Periode Penilaian</label>
@@ -924,7 +960,7 @@
                 <input type="text" x-model="settings.adminPassword" @change="saveToStorage()" class="w-full p-2.5 text-sm font-mono font-bold bg-slate-50 border rounded-xl">
               </div>
             </div>
- 
+
             <div class="space-y-2.5 pt-1">
               <template x-for="(rule, index) in settings.scoreRules" :key="index">
                 <div class="p-3 rounded-xl border grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center" :class="getRuleRowStyle(rule.category)">
@@ -954,17 +990,19 @@
               </template>
             </div>
           </div>
- 
-          <div class="lg:col-span-5 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5 flex flex-col justify-between">
-            <div class="space-y-5">
+
+          <!-- Kolom Kanan: Bobot Maksimal & Aturan Potongan Absen -->
+          <div class="lg:col-span-6 space-y-6">
+            <!-- Kartu Bobot Maksimal -->
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                 <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><i data-lucide="scale" class="w-5 h-5"></i></div>
                 <div>
-                  <h2 class="text-base font-bold text-slate-900">Bobot & Potongan Absensi</h2>
-                  <p class="text-xs text-slate-500">Bobot komponen utama, tier terlambat & potongan alpha</p>
+                  <h2 class="text-base font-bold text-slate-900">Bobot Maksimal Komponen Utama</h2>
+                  <p class="text-xs text-slate-500">Konfigurasi bobot max Absen, Kinerja, & Tahsin</p>
                 </div>
               </div>
- 
+
               <div class="grid grid-cols-3 gap-3">
                 <div class="p-3 bg-slate-50 rounded-xl border">
                   <label class="block text-xs font-bold text-slate-700 mb-1">Maks. Absen</label>
@@ -979,59 +1017,76 @@
                   <input type="number" x-model.number="settings.weights.tahsinMax" @change="saveToStorage()" class="w-full p-2 text-sm font-bold bg-white border rounded-lg">
                 </div>
               </div>
+            </div>
 
-              <!-- Aturan Potongan Keterlambatan Bertingkat -->
-              <div class="pt-3 border-t border-slate-100 space-y-2.5">
-                <div class="flex items-center justify-between">
-                  <span class="text-xs font-bold text-slate-700">Aturan Potongan Keterlambatan (Hari)</span>
-                  <span class="text-[11px] text-slate-400">Kosongkan Maks = Tak terbatas</span>
+            <!-- Kartu Aturan Potongan Keterlambatan & Alpha -->
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <div class="flex items-center justify-between gap-2 border-b border-slate-100 pb-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center"><i data-lucide="clock" class="w-5 h-5"></i></div>
+                  <div>
+                    <h2 class="text-base font-bold text-slate-900">Aturan Potongan Keterlambatan & Alpha</h2>
+                    <p class="text-xs text-slate-500">Kosongkan batas atas (Max Hari) untuk rentang tak terbatas (≥)</p>
+                  </div>
                 </div>
+                <button @click="addLateRule()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center gap-1">
+                  <i data-lucide="plus" class="w-3.5 h-3.5"></i><span>Tambah Tier</span>
+                </button>
+              </div>
 
-                <template x-for="(rule, lIdx) in settings.lateRules" :key="lIdx">
-                  <div class="grid grid-cols-12 gap-2 items-center bg-slate-50 p-2 rounded-xl border text-xs">
+              <!-- Header Kolom Tier Keterlambatan -->
+              <div class="grid grid-cols-12 gap-2 text-[11px] font-bold text-slate-500 uppercase px-2">
+                <div class="col-span-3 text-center">Min Hari</div>
+                <div class="col-span-3 text-center">Max Hari</div>
+                <div class="col-span-4 text-center">Potongan Poin</div>
+                <div class="col-span-2 text-center">Aksi</div>
+              </div>
+
+              <div class="space-y-2">
+                <template x-for="(lr, lIdx) in settings.lateRules" :key="lIdx">
+                  <div class="p-2.5 rounded-xl bg-amber-50/50 border border-amber-200/80 grid grid-cols-12 gap-2 items-center">
                     <div class="col-span-3">
-                      <label class="block text-[10px] text-slate-500">Min Hari</label>
-                      <input type="number" min="0" x-model.number="rule.minDays" @change="saveToStorage()" class="w-full p-1.5 text-center font-bold bg-white border rounded-lg">
+                      <input type="number" min="0" x-model.number="lr.minDays" @change="saveToStorage()" class="w-full p-1.5 text-center text-sm font-bold bg-white border rounded-lg">
                     </div>
                     <div class="col-span-3">
-                      <label class="block text-[10px] text-slate-500">Maks Hari</label>
-                      <input type="number" min="0"
-                             :value="rule.maxDays === null || rule.maxDays === undefined ? '' : rule.maxDays"
-                             @input="rule.maxDays = ($event.target.value === '' ? null : Number($event.target.value)); saveToStorage()"
-                             placeholder="∞"
-                             class="w-full p-1.5 text-center font-bold bg-white border rounded-lg">
+                      <input type="number" min="0" :value="lr.maxDays" @input="lr.maxDays = $event.target.value === '' ? null : Number($event.target.value); saveToStorage()" placeholder="∞ (Tak terbatas)" class="w-full p-1.5 text-center text-sm font-bold bg-white border rounded-lg placeholder:text-[10px] placeholder:font-normal">
                     </div>
-                    <div class="col-span-3">
-                      <label class="block text-[10px] text-slate-500">Potong (pt)</label>
-                      <input type="number" min="0" step="0.5" x-model.number="rule.penalty" @change="saveToStorage()" class="w-full p-1.5 text-center font-extrabold text-rose-600 bg-white border rounded-lg">
+                    <div class="col-span-4">
+                      <div class="relative">
+                        <input type="number" step="0.5" min="0" x-model.number="lr.penalty" @change="saveToStorage()" class="w-full p-1.5 pr-7 text-center text-sm font-extrabold text-amber-900 bg-white border rounded-lg">
+                        <span class="absolute right-2 top-2 text-[11px] font-bold text-slate-400">pt</span>
+                      </div>
                     </div>
-                    <div class="col-span-3 text-right pt-3">
-                      <span class="text-[11px] font-semibold text-slate-600"
-                            x-text="rule.maxDays === null || rule.maxDays === undefined ? (rule.minDays + '+ hr') : (rule.minDays === rule.maxDays ? (rule.minDays + ' hr') : (rule.minDays + '-' + rule.maxDays + ' hr'))"></span>
+                    <div class="col-span-2 flex justify-center">
+                      <button @click="removeLateRule(lIdx)" :disabled="settings.lateRules.length <= 1" class="p-1.5 text-rose-600 hover:bg-rose-100 rounded-lg disabled:opacity-40"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                     </div>
                   </div>
                 </template>
+              </div>
 
-                <div class="p-3 bg-rose-50/60 rounded-xl border border-rose-200/70 flex items-center justify-between gap-3">
-                  <div>
-                    <label class="block text-xs font-bold text-rose-900">Potongan Alpha per Hari</label>
-                    <p class="text-[11px] text-rose-700">Dikalikan jumlah total hari alpha</p>
-                  </div>
-                  <input type="number" min="0" step="0.5" x-model.number="settings.absenPenaltyAlpha" @change="saveToStorage()" class="w-24 p-1.5 text-center text-sm font-extrabold text-rose-700 bg-white border border-rose-300 rounded-lg">
+              <!-- Pengaturan Alpha -->
+              <div class="p-3.5 rounded-xl bg-rose-50/70 border border-rose-200 flex items-center justify-between gap-4">
+                <div>
+                  <label class="block text-xs font-bold text-rose-900">Potongan Poin Alpha (Per Hari)</label>
+                  <p class="text-[11px] text-rose-700">Total potongan = Jumlah Hari Alpha × Poin Potongan ini</p>
+                </div>
+                <div class="relative w-28 shrink-0">
+                  <input type="number" step="0.5" min="0" x-model.number="settings.absenPenaltyAlpha" @change="saveToStorage()" class="w-full p-2 pr-7 text-center text-sm font-extrabold text-rose-900 bg-white border border-rose-300 rounded-lg">
+                  <span class="absolute right-2.5 top-2.5 text-xs font-bold text-rose-400">pt</span>
                 </div>
               </div>
-            </div>
- 
-            <div class="pt-4 border-t border-slate-100 flex justify-between items-center">
-              <button @click="resetDefaultSettings()" class="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">Reset Default</button>
-              <button @click="saveToStorage(); showToast('Pengaturan disimpan!', 'success')" class="px-5 py-2.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow">Simpan</button>
+
+              <div class="pt-3 border-t border-slate-100 flex justify-between items-center">
+                <button @click="resetDefaultSettings()" class="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">Reset Default</button>
+                <button @click="saveToStorage(); showToast('Pengaturan disimpan & disinkronkan!', 'success')" class="px-5 py-2.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow">Simpan Pengaturan</button>
+              </div>
             </div>
           </div>
         </div>
       </section>
- 
+
     </main>
- 
+
     <!-- =================================================================== -->
     <!-- MODAL CUSTOM JOBDESC & BOBOT (ADMIN) / INPUT NILAI (KEPALA BAGIAN)  -->
     <!-- =================================================================== -->
@@ -1044,7 +1099,7 @@
           </div>
           <button @click="jobdescModal.open = false" class="text-emerald-200 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
         </div>
- 
+
         <div class="p-6 space-y-4 max-h-[75vh] overflow-y-auto" x-data="{
           addItem() {
             if (!jobdescModal.emp.jobdesItems) jobdescModal.emp.jobdesItems = [];
@@ -1054,7 +1109,6 @@
             jobdescModal.emp.jobdesItems.splice(idx, 1);
           }
         }">
-          <!-- Toolbar khusus Admin (Salin & Tambah Item) -->
           <div x-show="currentUser && currentUser.role === 'ADMIN'" class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-emerald-50 p-3.5 rounded-xl border border-emerald-200 text-xs text-emerald-900">
             <div>
               <span>Total Bobot Item: </span>
@@ -1075,13 +1129,12 @@
               </button>
             </div>
           </div>
- 
-          <!-- Info khusus Kepala Bagian -->
+
           <div x-show="currentUser && currentUser.role === 'SUPERVISOR'" class="bg-blue-50 p-3.5 rounded-xl border border-blue-200 text-xs text-blue-900 flex items-center justify-between">
             <span>Silakan isi kolom <strong>Nilai (0 - 100)</strong> sesuai pencapaian masing-masing item pekerjaan karyawan ini.</span>
             <span class="font-bold whitespace-nowrap ml-2" x-text="'Skor Konversi: ' + formatNum(calcKinerjaPoints(jobdescModal.emp)) + ' pt'"></span>
           </div>
- 
+
           <div class="border rounded-xl overflow-hidden">
             <table class="w-full text-left text-sm">
               <thead class="bg-slate-100 text-xs uppercase text-slate-600">
@@ -1133,15 +1186,15 @@
               </tbody>
             </table>
           </div>
- 
+
           <div class="flex justify-end gap-2 pt-2">
             <button @click="jobdescModal.open = false" class="px-4 py-2 text-sm font-semibold bg-slate-100 rounded-xl">Tutup</button>
-            <button @click="saveToStorage(); jobdescModal.open = false; showToast('Nilai kinerja berhasil disimpan!', 'success')" class="px-5 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow">Simpan Penilaian</button>
+            <button @click="saveToStorage(); jobdescModal.open = false; showToast('Nilai kinerja berhasil disimpan & disinkronkan!', 'success')" class="px-5 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow">Simpan Penilaian</button>
           </div>
         </div>
       </div>
     </div>
- 
+
     <!-- =================================================================== -->
     <!-- MODAL TAMBAH / EDIT AKUN KEPALA BAGIAN (KHUSUS ADMIN)               -->
     <!-- =================================================================== -->
@@ -1177,7 +1230,7 @@
         </form>
       </div>
     </div>
- 
+
     <!-- =================================================================== -->
     <!-- MODAL ASSIGN / MAPPING KARYAWAN KE KEPALA BAGIAN                    -->
     <!-- =================================================================== -->
@@ -1190,9 +1243,8 @@
           </div>
           <button @click="assignModal.open = false" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
         </div>
- 
+
         <div class="p-6 space-y-4">
-          <!-- Filter cepat di dalam modal assign -->
           <div class="flex flex-col sm:flex-row gap-2">
             <input type="text" x-model="assignSearch" placeholder="Cari nama atau jabatan karyawan..." class="flex-grow p-2 text-xs bg-slate-50 border rounded-xl">
             <select x-model="assignDeptFilter" class="p-2 text-xs bg-slate-50 border rounded-xl">
@@ -1203,7 +1255,7 @@
             </select>
             <button type="button" @click="selectAllFilteredForAssign()" class="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl whitespace-nowrap">Pilih Semua Tampil</button>
           </div>
- 
+
           <div class="max-h-80 overflow-y-auto border rounded-xl divide-y divide-slate-100">
             <template x-for="emp in filteredEmployeesForAssign" :key="emp.id">
               <label class="flex items-center justify-between p-3 hover:bg-slate-50 cursor-pointer">
@@ -1218,7 +1270,7 @@
               </label>
             </template>
           </div>
- 
+
           <div class="flex items-center justify-between pt-2">
             <span class="text-xs font-bold text-emerald-700" x-text="assignSelectedIds.length + ' karyawan dipilih'"></span>
             <div class="flex gap-2">
@@ -1229,7 +1281,7 @@
         </div>
       </div>
     </div>
- 
+
     <!-- MODAL TAMBAH / EDIT KARYAWAN -->
     <div x-show="modal.open" style="display: none;" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
       <div @click.away="modal.open = false" class="bg-white w-full max-w-lg rounded-2xl shadow-2xl border overflow-hidden my-8">
@@ -1274,7 +1326,7 @@
         </form>
       </div>
     </div>
- 
+
     <!-- MODAL KONFIRMASI -->
     <div x-show="confirmModal.open" style="display: none;" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
       <div @click.away="confirmModal.open = false" class="bg-white w-full max-w-md rounded-2xl shadow-2xl border p-6 space-y-4">
@@ -1291,21 +1343,30 @@
         </div>
       </div>
     </div>
- 
+
     <footer class="bg-white border-t border-slate-200 py-4 mt-8 no-print">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-500">
-        &copy; <span x-text="settings.year"></span> Sistem Penilaian Kinerja & Kompensasi — PT Medika Kesehatan Kerja & CV Medika Group Mandiri (v11 Tiered Late & Alpha Rules)
+        &copy; <span x-text="settings.year"></span> Sistem Penilaian Kinerja & Kompensasi — PT Medika Kesehatan Kerja & CV Medika Group Mandiri (v10 Cloud Sync)
       </div>
     </footer>
   </div>
- 
+
   <script>
     function appraisalApp() {
       return {
+        // =========================================================================
+        // KONFIGURASI FIREBASE REALTIME DATABASE
+        // Ganti URL di bawah ini dengan URL Firebase Realtime Database milik Anda
+        // Contoh: 'https://penilaian-kinerja-mkk-default-rtdb.asia-southeast1.firebasedatabase.app'
+        // =========================================================================
+        firebaseUrl: 'https://NAMA-PROJECT-ANDA-default-rtdb.asia-southeast1.firebasedatabase.app',
+        syncStatus: 'offline', // 'syncing' | 'synced' | 'offline'
+        lastSyncedAt: '',
+
         currentUser: null,
         loginForm: { username: '', password: '' },
         loginError: '',
- 
+
         activeTab: 'dashboard',
         toast: { show: false, message: '', type: 'success' },
         globalFilter: { search: '', unit: 'ALL', dept: 'ALL', status: 'ALL' },
@@ -1315,7 +1376,7 @@
         form: { id: null, name: '', nik: '', unit: 'PT', department: '', position: '', baseSalary: 4500000 },
         categoryOptions: ['Sangat Baik (A)', 'Baik (B)', 'Cukup (C)', 'Kurang (D)'],
         copySourceEmpId: '',
- 
+
         // Manajemen Kepala Bagian
         supervisors: [],
         supModal: { open: false, isEdit: false },
@@ -1329,14 +1390,13 @@
           year: 2025,
           adminPassword: 'admin123',
           weights: { absenMax: 30, kinerjaMax: 50, tahsinMax: 20 },
-          absenPenaltyLate: 1,
-          absenPenaltyAlpha: 5,
           lateRules: [
             { minDays: 0, maxDays: 0, penalty: 0 },
             { minDays: 1, maxDays: 4, penalty: 1 },
             { minDays: 5, maxDays: 10, penalty: 3 },
             { minDays: 11, maxDays: null, penalty: 7 }
           ],
+          absenPenaltyAlpha: 1,
           spDeductions: { NONE: 0, SP1: -10, SP2: -20, SP3: -30 },
           scoreRules: [
             { minScore: 90, maxScore: 120, category: 'Sangat Baik (A)', raisePercent: 10 },
@@ -1346,7 +1406,27 @@
           ]
         },
         employees: [],
- 
+
+        get isFirebaseConfigured() {
+          return this.firebaseUrl && !this.firebaseUrl.includes('NAMA-PROJECT-ANDA') && this.firebaseUrl.startsWith('http');
+        },
+
+        get syncStatusText() {
+          if (!this.isFirebaseConfigured) return 'URL Firebase Belum Diatur (Lokal)';
+          if (this.syncStatus === 'syncing') return 'Menyinkronkan Cloud...';
+          if (this.syncStatus === 'synced') return this.lastSyncedAt ? `Tersinkronisasi (${this.lastSyncedAt})` : 'Tersinkronisasi Cloud';
+          return 'Mode Offline (Data Lokal)';
+        },
+
+        defaultLateRules() {
+          return [
+            { minDays: 0, maxDays: 0, penalty: 0 },
+            { minDays: 1, maxDays: 4, penalty: 1 },
+            { minDays: 5, maxDays: 10, penalty: 3 },
+            { minDays: 11, maxDays: null, penalty: 7 }
+          ];
+        },
+
         defaultJobdes() {
           return [
             { task: 'Melaksanakan pelayanan sesuai standar operasional prosedur', freq: 'Setiap Hari', weight: 0.5, score: 85 },
@@ -1354,55 +1434,46 @@
             { task: 'Koordinasi dan kerjasama dengan tim internal', freq: 'Setiap Hari', weight: 0.2, score: 85 }
           ];
         },
- 
+
         defaultEmployees() {
           return [
             { id: 1, name: 'dr. Budi Santoso', nik: 'MKK-001', unit: 'PT', department: 'Pelayanan Medis', position: 'Dokter Umum', baseSalary: 8500000, absenLate: 1, absenAlpha: 0, spStatus: 'NONE', tahsinScore: 88, directorAdj: 3, directorNote: 'Penanggung jawab MCU', jobdesItems: [
               { task: 'Pemeriksaan pasien umum & MCU', freq: 'Setiap Hari', weight: 0.6, score: 95 },
               { task: 'Pencatatan rekam medis digital', freq: 'Setiap Hari', weight: 0.4, score: 90 }
             ]},
-            { id: 2, name: 'Siti Rahmawati, Amd.Kep', nik: 'MGM-004', unit: 'CV', department: 'Keperawatan', position: 'Perawat Pelaksana', baseSalary: 4800000, absenLate: 2, absenAlpha: 0, spStatus: 'NONE', tahsinScore: 85, directorAdj: 0, directorNote: '', jobdesItems: [
+            { id: 2, name: 'Siti Rahmawati, Amd.Kep', nik: 'MGM-004', unit: 'CV', department: 'Keperawatan', position: 'Perawat Pelaksana', baseSalary: 4800000, absenLate: 5, absenAlpha: 1, spStatus: 'NONE', tahsinScore: 85, directorAdj: 0, directorNote: '', jobdesItems: [
               { task: 'Tindakan keperawatan & triage pasien', freq: 'Setiap Hari', weight: 0.5, score: 88 },
               { task: 'Sterilisasi alat medis klinik', freq: 'Setiap Hari', weight: 0.3, score: 85 },
               { task: 'Laporan shift harian', freq: 'Setiap Hari', weight: 0.2, score: 85 }
             ]},
-            { id: 3, name: 'Rizky Pratama, S.E.', nik: 'MKK-009', unit: 'PT', department: 'Keuangan & Admin', position: 'Staff Keuangan', baseSalary: 5200000, absenLate: 4, absenAlpha: 0, spStatus: 'NONE', tahsinScore: 78, directorAdj: 2, directorNote: 'Ketepatan laporan pajak', jobdesItems: [
+            { id: 3, name: 'Rizky Pratama, S.E.', nik: 'MKK-009', unit: 'PT', department: 'Keuangan & Admin', position: 'Staff Keuangan', baseSalary: 5200000, absenLate: 12, absenAlpha: 2, spStatus: 'NONE', tahsinScore: 78, directorAdj: 2, directorNote: 'Ketepatan laporan pajak', jobdesItems: [
               { task: 'Pencatatan kas masuk & keluar', freq: 'Setiap Hari', weight: 0.4, score: 80 },
               { task: 'Pembuatan invoice & rekap tagihan vendor', freq: '1 bulan 1x', weight: 0.4, score: 82 },
               { task: 'Arsip dokumen pajak', freq: '1 bulan 1x', weight: 0.2, score: 75 }
             ]}
           ];
         },
- 
+
         defaultSupervisors() {
           return [
             { id: 101, name: 'Kepala Bagian Pelayanan & Keperawatan', department: 'Keperawatan & Medis', username: 'kabag_medis', password: '123', assignedEmpIds: [1, 2] },
             { id: 102, name: 'Kepala Bagian Keuangan & Admin', department: 'Keuangan & Admin', username: 'kabag_keu', password: '123', assignedEmpIds: [3] }
           ];
         },
- 
-        initApp() {
-          const defaultLateRules = [
-            { minDays: 0, maxDays: 0, penalty: 0 },
-            { minDays: 1, maxDays: 4, penalty: 1 },
-            { minDays: 5, maxDays: 10, penalty: 3 },
-            { minDays: 11, maxDays: null, penalty: 7 }
-          ];
 
-          const s = localStorage.getItem('appraisal_settings_v6') || localStorage.getItem('appraisal_settings_v5');
+        loadFromLocalFallback() {
+          const s = localStorage.getItem('appraisal_settings_v9') || localStorage.getItem('appraisal_settings_v6') || localStorage.getItem('appraisal_settings_v5');
           const e = localStorage.getItem('appraisal_employees_v6') || localStorage.getItem('appraisal_employees_v5');
           const sup = localStorage.getItem('appraisal_supervisors_v7');
- 
+
           if (s) { 
             try { 
               const parsedS = JSON.parse(s);
               this.settings = { ...this.settings, ...parsedS };
               if (!this.settings.adminPassword) this.settings.adminPassword = 'admin123';
               if (!Array.isArray(this.settings.lateRules) || this.settings.lateRules.length === 0) {
-                this.settings.lateRules = JSON.parse(JSON.stringify(defaultLateRules));
-              }
-              if (this.settings.absenPenaltyAlpha === undefined || this.settings.absenPenaltyAlpha === null) {
-                this.settings.absenPenaltyAlpha = 5;
+                this.settings.lateRules = this.defaultLateRules();
+                this.settings.absenPenaltyAlpha = 1;
               }
             } catch(err){} 
           }
@@ -1411,14 +1482,65 @@
           } else { 
             this.employees = this.defaultEmployees(); 
           }
- 
+
           if (sup) {
             try { this.supervisors = JSON.parse(sup); } catch(err){ this.supervisors = this.defaultSupervisors(); }
           } else {
             this.supervisors = this.defaultSupervisors();
           }
-          this.cleanupDeletedAssignedEmployees();
- 
+        },
+
+        async fetchFromCloud(notify = false) {
+          if (!this.isFirebaseConfigured) {
+            this.loadFromLocalFallback();
+            this.syncStatus = 'offline';
+            return;
+          }
+
+          this.syncStatus = 'syncing';
+          try {
+            const cleanUrl = this.firebaseUrl.replace(/\/$/, '');
+            const res = await fetch(`${cleanUrl}/appraisalData.json`);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const cloudData = await res.json();
+
+            if (cloudData && Array.isArray(cloudData.employees)) {
+              this.settings = { ...this.settings, ...(cloudData.settings || {}) };
+              if (!this.settings.adminPassword) this.settings.adminPassword = 'admin123';
+              if (!Array.isArray(this.settings.lateRules) || this.settings.lateRules.length === 0) {
+                this.settings.lateRules = this.defaultLateRules();
+                this.settings.absenPenaltyAlpha = 1;
+              }
+              this.employees = cloudData.employees || [];
+              this.supervisors = Array.isArray(cloudData.supervisors) ? cloudData.supervisors : this.defaultSupervisors();
+
+              // Perbarui cache lokal
+              localStorage.setItem('appraisal_settings_v9', JSON.stringify(this.settings));
+              localStorage.setItem('appraisal_employees_v6', JSON.stringify(this.employees));
+              localStorage.setItem('appraisal_supervisors_v7', JSON.stringify(this.supervisors));
+
+              this.syncStatus = 'synced';
+              this.lastSyncedAt = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+              if (notify) this.showToast('Data terbaru berhasil dimuat dari server cloud!', 'success');
+            } else {
+              // Cloud masih kosong (baru dibuat), muat data lokal/default
+              this.loadFromLocalFallback();
+              this.syncStatus = 'synced';
+              this.lastSyncedAt = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+              if (notify) this.showToast('Database cloud terhubung (masih kosong, silakan Restore JSON).', 'info');
+            }
+          } catch (err) {
+            console.error('Firebase fetch error:', err);
+            this.loadFromLocalFallback();
+            this.syncStatus = 'offline';
+            if (notify) this.showToast('Gagal terhubung ke Firebase. Memuat data lokal.', 'warning');
+          }
+          this.$nextTick(() => lucide.createIcons());
+        },
+
+        async initApp() {
+          await this.fetchFromCloud(false);
+
           const savedSession = sessionStorage.getItem('appraisal_session_v7');
           if (savedSession) {
             try {
@@ -1428,43 +1550,55 @@
               }
             } catch(err){}
           }
- 
+
           this.$nextTick(() => lucide.createIcons());
         },
- 
-        cleanupDeletedAssignedEmployees() {
-          const validIds = new Set(this.employees.map(e => String(e.id)));
-          if (Array.isArray(this.supervisors)) {
-            this.supervisors.forEach(s => {
-              if (Array.isArray(s.assignedEmpIds)) {
-                s.assignedEmpIds = s.assignedEmpIds.filter(id => validIds.has(String(id)));
-              }
-            });
-          }
-        },
- 
-        saveToStorage() {
-          this.cleanupDeletedAssignedEmployees();
+
+        async saveToStorage() {
+          // 1. Simpan ke localStorage sebagai cadangan instan
+          localStorage.setItem('appraisal_settings_v9', JSON.stringify(this.settings));
           localStorage.setItem('appraisal_settings_v6', JSON.stringify(this.settings));
           localStorage.setItem('appraisal_employees_v6', JSON.stringify(this.employees));
           localStorage.setItem('appraisal_supervisors_v7', JSON.stringify(this.supervisors));
           this.$nextTick(() => lucide.createIcons());
+
+          // 2. Sinkronkan ke Firebase Realtime Database jika URL sudah diatur
+          if (!this.isFirebaseConfigured) {
+            this.syncStatus = 'offline';
+            return;
+          }
+
+          this.syncStatus = 'syncing';
+          try {
+            const cleanUrl = this.firebaseUrl.replace(/\/$/, '');
+            const res = await fetch(`${cleanUrl}/appraisalData.json`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                settings: this.settings,
+                employees: this.employees,
+                supervisors: this.supervisors,
+                lastUpdated: new Date().toISOString()
+              })
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            this.syncStatus = 'synced';
+            this.lastSyncedAt = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+          } catch (err) {
+            console.error('Firebase save error:', err);
+            this.syncStatus = 'offline';
+            this.showToast('Data tersimpan di perangkat, tetapi gagal sinkron ke cloud.', 'warning');
+          }
         },
- 
+
         // ==========================================
         // LOGIN & LOGOUT HANDLERS
         // ==========================================
-        quickFillLogin(u, p) {
-          this.loginForm.username = u;
-          this.loginForm.password = p;
-          this.loginError = '';
-        },
- 
         handleLogin() {
           this.loginError = '';
           const u = this.loginForm.username.trim();
           const p = this.loginForm.password.trim();
- 
+
           if (u === 'admin' && p === (this.settings.adminPassword || 'admin123')) {
             this.currentUser = { role: 'ADMIN', name: 'Admin / HRD', department: 'Manajemen Pusat' };
             sessionStorage.setItem('appraisal_session_v7', JSON.stringify(this.currentUser));
@@ -1473,7 +1607,7 @@
             this.$nextTick(() => lucide.createIcons());
             return;
           }
- 
+
           const foundSup = this.supervisors.find(s => s.username === u && s.password === p);
           if (foundSup) {
             this.currentUser = {
@@ -1489,10 +1623,10 @@
             this.$nextTick(() => lucide.createIcons());
             return;
           }
- 
+
           this.loginError = 'Username atau Password salah. Silakan periksa kembali.';
         },
- 
+
         handleLogout() {
           this.currentUser = null;
           sessionStorage.removeItem('appraisal_session_v7');
@@ -1500,7 +1634,7 @@
           this.loginError = '';
           this.$nextTick(() => lucide.createIcons());
         },
- 
+
         // ==========================================
         // MANAJEMEN AKUN KEPALA BAGIAN & MAPPING
         // ==========================================
@@ -1537,7 +1671,7 @@
           this.saveToStorage();
           this.showToast('Akun Kepala Bagian dihapus.', 'info');
         },
- 
+
         openAssignModal(sup) {
           this.assignModal = { open: true, sup };
           this.assignSelectedIds = [...(sup.assignedEmpIds || [])];
@@ -1553,55 +1687,42 @@
           });
         },
         selectAllFilteredForAssign() {
-          const currentSet = new Set((this.assignSelectedIds || []).map(id => String(id)));
           this.filteredEmployeesForAssign.forEach(emp => {
-            const sid = String(emp.id);
-            if (!currentSet.has(sid)) {
-              currentSet.add(sid);
-              this.assignSelectedIds.push(sid);
+            if (!this.assignSelectedIds.includes(emp.id)) {
+              this.assignSelectedIds.push(emp.id);
             }
           });
         },
         saveAssignModal() {
           if (this.assignModal.sup) {
-            const targetSup = this.supervisors.find(s => String(s.id) === String(this.assignModal.sup.id)) || this.assignModal.sup;
-            targetSup.assignedEmpIds = (this.assignSelectedIds || []).map(id => String(id));
+            this.assignModal.sup.assignedEmpIds = [...this.assignSelectedIds];
             this.saveToStorage();
-            this.showToast(`Daftar karyawan untuk ${targetSup.name} disimpan!`, 'success');
+            this.showToast(`Daftar karyawan untuk ${this.assignModal.sup.name} disimpan!`, 'success');
           }
           this.assignModal.open = false;
         },
-        getValidAssignedEmpIds(sup) {
-          if (!sup || !Array.isArray(sup.assignedEmpIds)) return [];
-          const validIds = new Set(this.employees.map(e => String(e.id)));
-          return sup.assignedEmpIds.filter(id => validIds.has(String(id)));
-        },
- 
         getEmployeeNameById(id) {
-          const emp = this.employees.find(e => String(e.id) === String(id));
-          return emp ? `${emp.name} (${emp.department})` : '';
+          const emp = this.employees.find(e => e.id == id);
+          return emp ? `${emp.name} (${emp.department})` : 'Karyawan Terhapus';
         },
- 
-        // ==========================================
-        // FILTER KARYAWAN BERDASARKAN ROLE LOGIN
-        // ==========================================
+
         get roleFilteredEmployees() {
           let baseList = this.filteredEmployees;
           if (this.currentUser && this.currentUser.role === 'SUPERVISOR') {
-            const sup = this.supervisors.find(s => String(s.id) === String(this.currentUser.id));
-            const allowedSet = new Set((sup && Array.isArray(sup.assignedEmpIds) ? sup.assignedEmpIds : []).map(id => String(id)));
-            baseList = baseList.filter(emp => allowedSet.has(String(emp.id)));
+            const sup = this.supervisors.find(s => s.id === this.currentUser.id);
+            const allowedIds = sup ? (sup.assignedEmpIds || []) : [];
+            baseList = baseList.filter(emp => allowedIds.includes(emp.id));
           }
           return baseList;
         },
- 
+
         // ==========================================
-        // BACKUP & RESTORE JSON (TERMASUK AKUN KABAG)
+        // BACKUP & RESTORE JSON
         // ==========================================
         exportDataJSON() {
           const backupData = {
             app: "Appraisal_PT_MKK_CV_MGM",
-            version: "v11",
+            version: "v10",
             exportDate: new Date().toISOString(),
             settings: this.settings,
             employees: this.employees,
@@ -1620,38 +1741,33 @@
           URL.revokeObjectURL(url);
           this.showToast('File Backup JSON berhasil diunduh!', 'success');
         },
- 
+
         importDataJSON(event) {
           const file = event.target.files[0];
           if (!file) return;
           const reader = new FileReader();
-          reader.onload = (e) => {
+          reader.onload = async (e) => {
             try {
               const parsed = JSON.parse(e.target.result);
               let restoredSettings = parsed.settings;
               let restoredEmployees = parsed.employees;
               let restoredSupervisors = parsed.supervisors;
- 
+
               if (typeof restoredSettings === 'string') restoredSettings = JSON.parse(restoredSettings);
               if (typeof restoredEmployees === 'string') restoredEmployees = JSON.parse(restoredEmployees);
               if (typeof restoredSupervisors === 'string') restoredSupervisors = JSON.parse(restoredSupervisors);
- 
+
               if (restoredSettings && Array.isArray(restoredEmployees)) {
                 this.settings = { ...this.settings, ...restoredSettings };
                 if (!Array.isArray(this.settings.lateRules) || this.settings.lateRules.length === 0) {
-                  this.settings.lateRules = [
-                    { minDays: 0, maxDays: 0, penalty: 0 },
-                    { minDays: 1, maxDays: 4, penalty: 1 },
-                    { minDays: 5, maxDays: 10, penalty: 3 },
-                    { minDays: 11, maxDays: null, penalty: 7 }
-                  ];
+                  this.settings.lateRules = this.defaultLateRules();
                 }
                 this.employees = restoredEmployees;
                 if (Array.isArray(restoredSupervisors)) {
                   this.supervisors = restoredSupervisors;
                 }
-                this.saveToStorage();
-                this.showToast(`Berhasil memulihkan ${this.employees.length} data karyawan dari file JSON!`, 'success');
+                await this.saveToStorage();
+                this.showToast(`Berhasil memulihkan ${this.employees.length} data karyawan & mengirim ke cloud!`, 'success');
               } else {
                 this.showToast('Format file JSON tidak valid atau rusak.', 'warning');
               }
@@ -1663,20 +1779,14 @@
           reader.readAsText(file);
           event.target.value = '';
         },
- 
+
         resetDefaultSettings() {
           this.settings = {
             year: 2025,
             adminPassword: 'admin123',
             weights: { absenMax: 30, kinerjaMax: 50, tahsinMax: 20 },
-            absenPenaltyLate: 1,
-            absenPenaltyAlpha: 5,
-            lateRules: [
-              { minDays: 0, maxDays: 0, penalty: 0 },
-              { minDays: 1, maxDays: 4, penalty: 1 },
-              { minDays: 5, maxDays: 10, penalty: 3 },
-              { minDays: 11, maxDays: null, penalty: 7 }
-            ],
+            lateRules: this.defaultLateRules(),
+            absenPenaltyAlpha: 1,
             spDeductions: { NONE: 0, SP1: -10, SP2: -20, SP3: -30 },
             scoreRules: [
               { minScore: 90, maxScore: 120, category: 'Sangat Baik (A)', raisePercent: 10 },
@@ -1688,7 +1798,7 @@
           this.saveToStorage();
           this.showToast('Pengaturan dikembalikan ke default.', 'info');
         },
- 
+
         addScoreRule() {
           this.settings.scoreRules.push({ minScore: 0, maxScore: 50, category: 'Baik (B)', raisePercent: 0 });
           this.saveToStorage();
@@ -1698,7 +1808,17 @@
           this.settings.scoreRules.splice(idx, 1);
           this.saveToStorage();
         },
- 
+
+        addLateRule() {
+          this.settings.lateRules.push({ minDays: 15, maxDays: null, penalty: 10 });
+          this.saveToStorage();
+        },
+        removeLateRule(idx) {
+          if (this.settings.lateRules.length <= 1) return;
+          this.settings.lateRules.splice(idx, 1);
+          this.saveToStorage();
+        },
+
         openJobdescModal(emp) {
           if (!emp) return;
           if (!emp.jobdesItems || emp.jobdesItems.length === 0) {
@@ -1708,7 +1828,7 @@
           this.jobdescModal = { open: true, emp };
           this.$nextTick(() => lucide.createIcons());
         },
- 
+
         copyJobdescFromOther() {
           if (!this.copySourceEmpId || !this.jobdescModal.emp) {
             this.showToast('Pilih karyawan sumber terlebih dahulu.', 'warning');
@@ -1722,7 +1842,7 @@
             this.showToast('Karyawan sumber tidak memiliki item jobdesc.', 'warning');
           }
         },
- 
+
         getTotalJobdesWeight(emp) {
           if (!emp || !emp.jobdesItems) return 0;
           const sum = emp.jobdesItems.reduce((acc, item) => acc + (Number(item.weight) || 0), 0);
@@ -1730,63 +1850,33 @@
         },
 
         // ==========================================
-        // PERHITUNGAN ABSEN (TIER TERLAMBAT & ALPHA)
+        // PERHITUNGAN POIN ABSEN (TIER TERLAMBAT & ALPHA)
         // ==========================================
-        getLateRules() {
-          const defaultRules = [
-            { minDays: 0, maxDays: 0, penalty: 0 },
-            { minDays: 1, maxDays: 4, penalty: 1 },
-            { minDays: 5, maxDays: 10, penalty: 3 },
-            { minDays: 11, maxDays: null, penalty: 7 }
-          ];
-          if (Array.isArray(this.settings.lateRules) && this.settings.lateRules.length > 0) {
-            return this.settings.lateRules;
-          }
-          return defaultRules;
-        },
-
-        getLateRulesSummary() {
-          const rules = this.getLateRules();
-          return rules.map(r => {
-            const minD = Number(r.minDays) || 0;
-            const hasMax = r.maxDays !== null && r.maxDays !== undefined && r.maxDays !== '';
-            const rangeText = !hasMax ? `${minD}+ hr` : (minD === Number(r.maxDays) ? `${minD} hr` : `${minD}-${Number(r.maxDays)} hr`);
-            return `${rangeText} = -${Number(r.penalty) || 0} pt`;
-          }).join(', ');
-        },
-
-        calcLatePenalty(lateDays) {
-          const days = Math.max(0, Number(lateDays) || 0);
-          const rules = this.getLateRules();
-
-          const matched = rules.find(r => {
-            const minD = Number(r.minDays) || 0;
-            const hasMax = r.maxDays !== null && r.maxDays !== undefined && r.maxDays !== '';
-            const maxD = hasMax ? Number(r.maxDays) : Infinity;
-            return days >= minD && days <= maxD;
+        calcLateDeduction(emp) {
+          const lateDays = Math.max(0, Number(emp.absenLate) || 0);
+          const rules = this.settings.lateRules || this.defaultLateRules();
+          const matchedRule = rules.find(r => {
+            const min = Number(r.minDays) || 0;
+            const hasMax = r.maxDays !== null && r.maxDays !== '' && !isNaN(Number(r.maxDays));
+            const max = hasMax ? Number(r.maxDays) : Infinity;
+            return lateDays >= min && lateDays <= max;
           });
-
-          if (matched) {
-            return Math.max(0, Number(matched.penalty) || 0);
-          }
-
-          const sortedDesc = [...rules].sort((a, b) => (Number(b.minDays) || 0) - (Number(a.minDays) || 0));
-          return sortedDesc.length > 0 ? Math.max(0, Number(sortedDesc[0].penalty) || 0) : 0;
+          return matchedRule ? (Number(matchedRule.penalty) || 0) : 0;
         },
 
-        calcAlphaPenalty(alphaDays) {
-          const days = Math.max(0, Number(alphaDays) || 0);
-          const rate = Math.max(0, Number(this.settings.absenPenaltyAlpha) || 0);
-          return days * rate;
+        calcAlphaDeduction(emp) {
+          const alphaDays = Math.max(0, Number(emp.absenAlpha) || 0);
+          const penaltyPerDay = Number(this.settings.absenPenaltyAlpha) || 0;
+          return alphaDays * penaltyPerDay;
         },
- 
+
         calcAbsenPoints(emp) {
           const max = Number(this.settings.weights.absenMax) || 0;
-          const latePenalty = this.calcLatePenalty(emp.absenLate);
-          const alphaPenalty = this.calcAlphaPenalty(emp.absenAlpha);
-          return Math.max(0, max - latePenalty - alphaPenalty);
+          const lateDed = this.calcLateDeduction(emp);
+          const alphaDed = this.calcAlphaDeduction(emp);
+          return Math.max(0, max - lateDed - alphaDed);
         },
- 
+
         calcKinerjaPoints(emp) {
           if (!emp || !emp.jobdesItems || emp.jobdesItems.length === 0) return 0;
           let weightedSum = 0;
@@ -1801,7 +1891,7 @@
           const maxKinerja = Number(this.settings.weights.kinerjaMax) || 50;
           return (finalScore100 / 100) * maxKinerja;
         },
- 
+
         calcSpPoints(emp) { return Number(this.settings.spDeductions[emp.spStatus]) || 0; },
         calcTahsinPoints(emp) {
           const score = Math.min(100, Math.max(0, Number(emp.tahsinScore) || 0));
@@ -1810,7 +1900,7 @@
         calcTotalScore(emp) {
           return Math.max(0, this.calcAbsenPoints(emp) + this.calcKinerjaPoints(emp) + this.calcSpPoints(emp) + this.calcTahsinPoints(emp) + (Number(emp.directorAdj) || 0));
         },
- 
+
         getMatchedRule(emp) {
           const total = Number(this.calcTotalScore(emp));
           const exact = this.settings.scoreRules.find(r => total >= Number(r.minScore) && total <= Number(r.maxScore));
@@ -1819,7 +1909,7 @@
           if (sorted.length > 0 && total > Number(sorted[0].maxScore)) return sorted[0];
           return sorted[sorted.length - 1] || { category: 'Belum Diatur', raisePercent: 0 };
         },
- 
+
         getGradeLabel(emp) { return this.getMatchedRule(emp).category; },
         getMatchedRuleRangeText(emp) {
           const rule = this.getMatchedRule(emp);
@@ -1834,7 +1924,7 @@
           const c = (this.getGradeLabel(emp) || '').toLowerCase();
           return !c.includes('kurang') && !c.includes('cukup');
         },
- 
+
         get uniqueDepartments() { return [...new Set(this.employees.map(e => e.department).filter(Boolean))].sort(); },
         get uniqueRuleCategories() { return [...new Set(this.settings.scoreRules.map(r => r.category))]; },
         
@@ -1854,7 +1944,7 @@
             return matchSearch && matchUnit;
           });
         },
- 
+
         countByUnit(u) { return this.employees.filter(e => e.unit === u).length; },
         get goodCategoryCount() { return this.filteredEmployees.filter(e => this.isGoodCategory(e)).length; },
         get notGoodCategoryCount() { return this.filteredEmployees.filter(e => !this.isGoodCategory(e)).length; },
@@ -1866,13 +1956,13 @@
           if (!this.filteredEmployees.length) return 0;
           return (this.filteredEmployees.reduce((a, e) => a + this.getSalaryIncreaseRate(e), 0) / this.filteredEmployees.length).toFixed(1);
         },
- 
+
         switchTab(tab) { this.activeTab = tab; this.$nextTick(() => lucide.createIcons()); },
         showToast(msg, type = 'success') {
           this.toast = { show: true, message: msg, type };
           setTimeout(() => { this.toast.show = false; }, 3500);
         },
- 
+
         openAddEmployeeModal() {
           this.modal.isEdit = false;
           this.form = { id: Date.now(), name: '', nik: '', unit: 'PT', department: '', position: '', baseSalary: 4500000, jobdesItems: JSON.parse(JSON.stringify(this.defaultJobdes())) };
@@ -1916,7 +2006,7 @@
           this.confirmModal.open = false;
           this.saveToStorage();
         },
- 
+
         downloadTemplate(type) {
           let rows = [['Nama Lengkap', 'NIK', 'Unit (PT/CV)', 'Organization', 'Jabatan', 'Gaji Pokok']];
           const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -1941,7 +2031,7 @@
                 this.showToast('File Excel kosong atau format tidak sesuai.', 'warning');
                 return;
               }
- 
+
               let addedCount = 0;
               json.forEach(row => {
                 const name = row['Nama Lengkap'] || row['Nama'] || row['nama'] || '';
@@ -1951,7 +2041,7 @@
                 const department = row['Organization'] || row['Departemen'] || row['department'] || 'Umum';
                 const position = row['Jabatan'] || row['position'] || '';
                 const baseSalary = Number(row['Gaji Pokok'] || row['gaji'] || row['baseSalary'] || 4500000);
- 
+
                 if (name) {
                   const existing = this.employees.find(emp => emp.nik === nik);
                   if (existing) {
@@ -1981,7 +2071,7 @@
                   addedCount++;
                 }
               });
- 
+
               this.saveToStorage();
               this.showToast(`Berhasil mengimpor ${addedCount} data karyawan!`, 'success');
             } catch (err) {
@@ -1992,14 +2082,20 @@
           reader.readAsArrayBuffer(file);
           e.target.value = '';
         },
- 
+
         formatNum(v) { const n = Number(v) || 0; return Number.isInteger(n) ? n : n.toFixed(1); },
         formatRupiah(v) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(v); },
- 
+
         exportExcel() {
-          const rows = [['NIK', 'Nama Lengkap', 'Unit', 'Organization', 'Jabatan', 'Absen', 'Kinerja', 'SP', 'Tahsin', 'Lain-Lain', 'Total Skor', 'Kategori', 'Kenaikan (%)', 'Gaji Baru']];
+          const rows = [['NIK', 'Nama Lengkap', 'Unit', 'Organization', 'Jabatan', 'Jml Terlambat (Hari)', 'Potongan Terlambat', 'Jml Alpha (Hari)', 'Potongan Alpha', 'Poin Absen', 'Kinerja', 'SP', 'Tahsin', 'Lain-Lain', 'Total Skor', 'Kategori', 'Kenaikan (%)', 'Gaji Baru']];
           this.filteredEmployees.forEach(e => {
-            rows.push([e.nik, e.name, e.unit, e.department, e.position || '-', this.calcAbsenPoints(e), this.calcKinerjaPoints(e), this.calcSpPoints(e), this.calcTahsinPoints(e), e.directorAdj, this.calcTotalScore(e), this.getGradeLabel(e), this.getSalaryIncreaseRate(e) + '%', Math.round(this.calcNewSalary(e))]);
+            rows.push([
+              e.nik, e.name, e.unit, e.department, e.position || '-',
+              e.absenLate || 0, -this.calcLateDeduction(e),
+              e.absenAlpha || 0, -this.calcAlphaDeduction(e),
+              this.calcAbsenPoints(e), this.calcKinerjaPoints(e), this.calcSpPoints(e), this.calcTahsinPoints(e), e.directorAdj,
+              this.calcTotalScore(e), this.getGradeLabel(e), this.getSalaryIncreaseRate(e) + '%', Math.round(this.calcNewSalary(e))
+            ]);
           });
           const ws = XLSX.utils.aoa_to_sheet(rows);
           const wb = XLSX.utils.book_new();
